@@ -1,0 +1,37 @@
+// Reveal App Coding Standards
+
+// File Structure
+- Maintain the prescribed project structure
+- Place components in their respective directories (components, screens, etc.)
+- Use PascalCase for component files and camelCase for utility files
+
+// Naming Conventions
+- Use descriptive, meaningful names for variables, functions, and components
+- Prefix interface names with 'I' (e.g., IUser)
+- Prefix type names with 'T' (e.g., TMessage)
+
+// Code Style
+- Use TypeScript for type safety
+- Use functional components with hooks
+- Prefer const over let where applicable
+- Use async/await for asynchronous operations
+- Document complex functions with JSDoc comments
+
+// Firebase
+- Keep Firebase service functions in the services directory
+- Use proper error handling for all Firebase operations
+
+// UI Components
+- Follow Material 3 guidelines for Android and Human Interface for iOS
+- Create responsive designs that work across device sizes
+- Implement proper accessibility attributes
+
+// Security
+- Implement proper authentication checks
+- Prepare for E2EE encryption using Libsodium/WebCrypto API
+- Never store sensitive information in plain text
+
+// Performance
+- Optimize rendering with React.memo where appropriate
+- Avoid unnecessary re-renders
+- Use proper image optimization techniques 
