@@ -977,7 +977,7 @@ const ChatScreen = () => {
       const username = message.senderName || 'Unknown';
       const timestamp = formatDate(message.createdAt);
       return `${username} - ${timestamp}`;
-    } else {
+      } else {
       return formatDate(message.createdAt);
     }
   };
@@ -1052,13 +1052,13 @@ const ChatScreen = () => {
                   <Text style={styles.avatarText}>
                     {item.senderName?.charAt(0).toUpperCase() || '?'}
                   </Text>
-                </View>
+          </View>
               )}
-            </View>
+        </View>
           )}
           
           {/* Message content */}
-          <TouchableOpacity
+                <TouchableOpacity
             style={[
               styles.messageContainer,
               isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage,
@@ -1082,7 +1082,7 @@ const ChatScreen = () => {
                     {!isCurrentUser && isRevealed && (
                       <View style={styles.imageSenderNameContainer}>
                         <Text style={styles.imageSenderName}>{item.senderName || 'Unknown'}</Text>
-                      </View>
+            </View>
                     )}
                     
                     <Image
@@ -1204,7 +1204,7 @@ const ChatScreen = () => {
                         // Removing lock icon as requested
                         null
                       )}
-                    </TouchableOpacity>
+                </TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -1220,10 +1220,10 @@ const ChatScreen = () => {
                   // Replace with password dots instead of blur overlay
                   <Text style={[styles.messageText, {color: '#8e8e8e', letterSpacing: 1}]}>
                     {getGibberishForMessage(item)}
-                  </Text>
+              </Text>
                 )}
-              </View>
-            )}
+            </View>
+          )}
           </TouchableOpacity>
         </View>
         
