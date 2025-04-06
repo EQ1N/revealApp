@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -65,6 +65,7 @@ import { getStandardHeaderOptions } from '../navigation/HeaderConfig';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import EmojiPicker, { EmojiStyle, Theme, Categories, EmojiClickData } from 'emoji-picker-react';
+import AudioWaveform from '../components/AudioWaveform';
 
 // Define the navigation param list type
 type RootStackParamList = {
@@ -199,6 +200,9 @@ const ChatScreen = () => {
   const [isEmojiPickerVisible, setIsEmojiPickerVisible] = useState(false);
   const [mediaDimensions, setMediaDimensions] = useState<{[messageId: string]: {width: number, height: number, aspectRatio: number}}>({});
   const [cachedGibberish, setCachedGibberish] = useState<{[messageId: string]: string}>({});
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioSound, setAudioSound] = useState<Audio.Sound | null>(null);
   
   // Animation refs
   const contentFadeAnim = useRef(new Animated.Value(0)).current;
@@ -926,25 +930,69 @@ const ChatScreen = () => {
     }
   };
 
-  // Add a simple audio player function
-  const playAudio = async (audioUri: string) => {
+  // Replace the playAudio function with this enhanced version
+  const playAudio = async (audioUri: string, messageId: string) => {
     try {
+      // If there's already a sound playing, stop it
+      if (audioSound) {
+        await audioSound.unloadAsync();
+        setAudioSound(null);
+        
+        // If we're stopping the same audio that's playing, just stop and return
+        if (playingAudioId === messageId) {
+          setPlayingAudioId(null);
+          setAudioProgress(0);
+          return;
+        }
+      }
+      
+      // Set the currently playing audio ID
+      setPlayingAudioId(messageId);
+      setAudioProgress(0);
+      
+      // Create and play the new sound
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUri },
-        { shouldPlay: true }
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
       );
       
-      // Unload sound when finished
-      sound.setOnPlaybackStatusUpdate(status => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync();
-        }
-      });
+      setAudioSound(sound);
     } catch (error) {
       console.error('Error playing audio:', error);
       Alert.alert('Error', 'Could not play audio message');
+      setPlayingAudioId(null);
+      setAudioProgress(0);
     }
   };
+
+  // Add this function to track playback progress
+  const onPlaybackStatusUpdate = (status: any) => {
+    if (status.isLoaded) {
+      if (status.didJustFinish) {
+        // Audio finished playing
+        setPlayingAudioId(null);
+        setAudioProgress(0);
+        if (audioSound) {
+          audioSound.unloadAsync();
+          setAudioSound(null);
+        }
+      } else if (status.isPlaying) {
+        // Update progress (positionMillis / durationMillis)
+        const progress = status.positionMillis / status.durationMillis;
+        setAudioProgress(progress);
+      }
+    }
+  };
+
+  // Add this useEffect to clean up audio resources when component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioSound) {
+        audioSound.unloadAsync();
+      }
+    };
+  }, [audioSound]);
 
   // Load media dimensions for all messages on messages change
   useEffect(() => {
@@ -1063,7 +1111,13 @@ const ChatScreen = () => {
               styles.messageContainer,
               isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage,
               // Remove padding for image messages
-              item.mediaType === 'image' && styles.noPadding
+              item.mediaType === 'image' && styles.noPadding,
+              // Adjust padding for audio messages
+              item.mediaType === 'audio' && styles.audioMessageContainer,
+              // Remove padding for blurred text messages
+              (!item.mediaUrl && !isRevealed) && styles.noPadding,
+              // Remove padding for blurred audio messages
+              (item.mediaType === 'audio' && !isRevealed) && styles.noPadding
             ]}
             onPress={handleMessagePress}
             activeOpacity={0.8}
@@ -1176,51 +1230,50 @@ const ChatScreen = () => {
                 )}
                 
                 {item.mediaType === 'audio' && (
-                  <View style={styles.audioContainer}>
-                    <View style={styles.audioIconContainer}>
-                      <Ionicons name="musical-note" size={24} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.audioContent}>
-                      <Text style={styles.audioText}>Audio Message</Text>
-                      {item.text && (
-                        <Text style={styles.audioCaption}>{item.text}</Text>
-                      )}
-                    </View>
-                <TouchableOpacity 
-                      style={[
-                        styles.audioButton,
-                        !isRevealed && { backgroundColor: '#888' }
-                      ]}
-                  onPress={() => {
+                  <View style={[
+                    styles.audioMessageWrapper,
+                    !isRevealed && styles.noPadding,
+                    isRevealed && { padding: 12 }
+                  ]}>
+                    <AudioWaveform 
+                      isRevealed={isRevealed}
+                      onPlay={() => {
                         if (isRevealed && item.mediaUrl) {
-                          playAudio(item.mediaUrl);
+                          playAudio(item.mediaUrl, item.id);
                         }
                       }}
-                      disabled={!isRevealed}
-                    >
-                      {isRevealed ? (
-                        <Ionicons name="play" size={20} color="#FFFFFF" />
-                      ) : (
-                        // Removing lock icon as requested
-                        null
-                      )}
-                </TouchableOpacity>
+                      width="100%"
+                      barCount={24}
+                      isPlaying={playingAudioId === item.id}
+                      progress={playingAudioId === item.id ? audioProgress : 0}
+                    />
+                    {item.text && isRevealed && (
+                      <Text style={styles.audioCaption}>{item.text}</Text>
+                    )}
                   </View>
                 )}
               </View>
             ) : (
               // Text message
-              <View>
+              <View style={{width: '100%'}}>
                 {!isCurrentUser && isRevealed && (
                   <Text style={styles.senderName}>{item.senderName || 'Unknown'}</Text>
                 )}
                 {isRevealed ? (
                   <Text style={styles.messageText}>{item.text}</Text>
                 ) : (
-                  // Replace with password dots instead of blur overlay
-                  <Text style={[styles.messageText, {color: '#8e8e8e', letterSpacing: 1}]}>
-                    {getGibberishForMessage(item)}
-              </Text>
+                  // Use actual text with blur overlay instead of password dots
+                  <View style={[styles.blurredTextContainer, { width: '100%' }]}>
+                    <Text style={[styles.messageText, {padding: 12}]}>{item.text}</Text>
+                    <BlurView 
+                      intensity={18} 
+                      tint="default" 
+                      style={[
+                        StyleSheet.absoluteFill, 
+                        { borderRadius: 18 }
+                      ]} 
+                    />
+                  </View>
                 )}
             </View>
           )}
@@ -1574,7 +1627,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 0) : 0,
   },
   contentContainer: {
     flex: 1,
@@ -1645,7 +1697,8 @@ const styles = StyleSheet.create({
   messageContainer: {
     maxWidth: '80%',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 18,
+    minWidth: 60,
   },
   currentUserMessage: {
     alignSelf: 'flex-end',
@@ -1946,6 +1999,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginVertical: 4,
+    width: 250, // Give it a specific width to accommodate waveform
+    minHeight: 80, // Ensure enough vertical space
   },
   audioIconContainer: {
     width: 40,
@@ -1958,16 +2013,20 @@ const styles = StyleSheet.create({
   },
   audioContent: {
     flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   audioText: {
     fontSize: 14,
     color: '#212121',
     fontWeight: '600',
+    marginBottom: 8,
   },
   audioCaption: {
     fontSize: 12,
     color: '#555',
-    marginTop: 4,
+    marginTop: 8,
+    width: '100%',
   },
   audioButton: {
     width: 36,
@@ -2512,6 +2571,10 @@ const styles = StyleSheet.create({
   },
   noPadding: {
     padding: 0,
+    margin: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    borderWidth: 0,
     overflow: 'hidden',
   },
   audioThumbnail: {
@@ -2562,7 +2625,10 @@ const styles = StyleSheet.create({
   blurredTextContainer: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 12,
+    borderRadius: 18,
+    width: '100%',
+    padding: 0,
+    margin: 0,
   },
   blurredOverlay: {
     position: 'absolute',
@@ -2573,7 +2639,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 12,
+    borderRadius: 18,
+  },
+  audioContentDirect: {
+    fontSize: 12,
+    color: '#555',
+    marginTop: 8,
+    width: '100%',
+  },
+  audioMessageWrapper: {
+    padding: 0,
+    margin: 0,
+    width: '100%',
+    overflow: 'hidden',
+    paddingRight: 0,
+    borderRadius: 18,
+  },
+  audioMessageContainer: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    maxWidth: 365,
+    width: 'auto',
+    minWidth: 200,
+    overflow: 'hidden',
+    borderRadius: 18,
   },
 });
 
